@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  db:
+    image: falkordb/falkordb:latest
+    container_name: gympulse_falkordb_local
+    ports:
+      - "6379:6379"
+    volumes:
+      - falkordb_data:/data
+    restart: always
+
+volumes:
+  falkordb_data:
