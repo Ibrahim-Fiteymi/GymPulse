@@ -883,3 +883,4 @@ def analytics_peak_hours(
 ):
     return AnalyticsService.peak_hours(graph, date_str=date)
 
+
