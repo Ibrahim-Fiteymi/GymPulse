@@ -2,24 +2,41 @@
 
 ## Table of Contents
 
-1. [Business Problem](#1-business-problem)
-2. [System Architecture](#2-system-architecture)
-3. [Technology Stack](#3-technology-stack)
-4. [Database — FalkorDB Graph Database](#4-database--falkordb-graph-database)
-5. [Entities and Relationships](#5-entities-and-relationships)
-6. [Backend — FastAPI](#6-backend--fastapi)
-7. [Pydantic Validation](#7-pydantic-validation)
-8. [Authentication and Security](#8-authentication-and-security)
-9. [Frontend — React + Vite](#9-frontend--react--vite)
-10. [Real-Time Features](#10-real-time-features)
-11. [Analytics](#11-analytics)
-12. [Payment Simulation System](#12-payment-simulation-system)
-13. [Code Robustness and Edge Cases](#13-code-robustness-and-edge-cases)
-14. [API Reference Summary](#14-api-reference-summary)
+1. [Introduction](#1-introduction)
+2. [Business Problem](#2-business-problem)
+3. [Proposed Solution](#3-proposed-solution)
+4. [System Architecture](#4-system-architecture)
+5. [Technology Stack](#5-technology-stack)
+6. [Database — FalkorDB Graph Database](#6-database--falkordb-graph-database)
+7. [Entities and Relationships](#7-entities-and-relationships)
+8. [Backend — FastAPI](#8-backend--fastapi)
+9. [Pydantic Validation](#9-pydantic-validation)
+10. [Authentication and Security](#10-authentication-and-security)
+11. [Frontend — React + Vite](#11-frontend--react--vite)
+12. [Real-Time Features](#12-real-time-features)
+13. [Analytics](#13-analytics)
+14. [Payment Simulation System](#14-payment-simulation-system)
+15. [Code Robustness and Edge Cases](#15-code-robustness-and-edge-cases)
+16. [API Reference Summary](#16-api-reference-summary)
+17. [Deployment](#17-deployment)
+18. [Current Status](#18-current-status)
+19. [Challenges Faced](#19-challenges-faced)
+20. [Limitations](#20-limitations)
 
 ---
 
-## 1. Business Problem
+## 1. Introduction
+
+GymPulse is a live full-stack gym management platform designed to improve operational visibility in fitness centers. The system helps gyms track equipment usage, manage reservations, monitor real-time availability, and analyze usage patterns through an interactive dashboard. Unlike a basic CRUD demo, the current implementation includes authentication, analytics, real-time synchronization, and a graph database model tailored to relationship-heavy gym operations.
+
+The project is publicly deployed and accessible online:
+
+- **Live application:** https://gympulse-581j.onrender.com/#dashboard
+- **GitHub repository:** https://github.com/Ibrahim-Fiteymi/GymPulse
+
+---
+
+## 2. Business Problem
 
 Modern gyms suffer from a fundamental coordination problem: members arrive, find their preferred equipment occupied, and leave frustrated — or worse, wait without any visibility into when it will free up. Staff have no real-time picture of utilization, and management lacks data to make decisions about equipment investment or staffing hours.
 
@@ -33,7 +50,23 @@ The business domain is genuinely suited to a **graph database**: the core questi
 
 ---
 
-## 2. System Architecture
+## 3. Proposed Solution
+
+GymPulse solves the gym coordination problem with a web-based full-stack system that provides:
+
+- Live equipment availability visible to all members
+- Reservation management with conflict detection
+- Usage tracking linked to equipment and members
+- Admin analytics for operational decision-making
+- Authentication for both members and admins
+- Real-time data refresh via WebSocket push and polling fallback
+- A deployed dashboard connected to a live backend
+
+The goal is to improve the gym experience for members while giving administrators clear, actionable operational data.
+
+---
+
+## 4. System Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -69,7 +102,7 @@ The business domain is genuinely suited to a **graph database**: the core questi
 
 ---
 
-## 3. Technology Stack
+## 5. Technology Stack
 
 | Layer | Technology | Version | Why |
 |---|---|---|---|
@@ -86,7 +119,7 @@ The business domain is genuinely suited to a **graph database**: the core questi
 
 ---
 
-## 4. Database — FalkorDB Graph Database
+## 6. Database — FalkorDB Graph Database
 
 ### Why FalkorDB over SQL
 
@@ -153,7 +186,7 @@ RETURN count(r)
 
 ---
 
-## 5. Entities and Relationships
+## 7. Entities and Relationships
 
 GymPulse defines **10 domain entities** plus 1 auth entity (**11 total**):
 
@@ -188,7 +221,7 @@ GymPulse defines **10 domain entities** plus 1 auth entity (**11 total**):
 
 ---
 
-## 6. Backend — FastAPI
+## 8. Backend — FastAPI
 
 ### Application structure
 
@@ -242,7 +275,7 @@ This pushes a JSON message to every connected client without blocking the HTTP r
 
 ---
 
-## 7. Pydantic Validation
+## 9. Pydantic Validation
 
 Pydantic v2 handles all input validation at the schema layer before business logic runs.
 
@@ -292,7 +325,7 @@ This ensures every validation error reaches the user as a clear, human-readable 
 
 ---
 
-## 8. Authentication and Security
+## 10. Authentication and Security
 
 ### JWT tokens
 
@@ -402,7 +435,7 @@ Expired or tampered tokens are immediately cleared from localStorage, forcing re
 
 ---
 
-## 9. Frontend — React + Vite
+## 11. Frontend — React + Vite
 
 ### Component map
 
@@ -466,7 +499,7 @@ This means all images in `pics/` are accessible as `/filename.png` in the browse
 
 ---
 
-## 10. Real-Time Features
+## 12. Real-Time Features
 
 GymPulse implements real-time updates using **WebSocket push** combined with **HTTP polling** as a fallback:
 
@@ -504,7 +537,7 @@ The Dashboard independently polls every 15 seconds (`POLL_INTERVAL = 15000`) so 
 
 ---
 
-## 11. Analytics
+## 13. Analytics
 
 ### KPI Summary (`/analytics/summary`)
 
@@ -556,7 +589,7 @@ Returns all 24 hours as `PeakHourEntry` objects (zero-count hours included for c
 
 ---
 
-## 12. Payment Simulation System
+## 14. Payment Simulation System
 
 GymPulse includes a full **sandbox payment flow** attached to the Membership page. It is 100% simulated — no real payment APIs are called.
 
@@ -592,7 +625,7 @@ All sandbox credentials are documented in `credentials.md` and removed from the 
 
 ---
 
-## 13. Code Robustness and Edge Cases
+## 15. Code Robustness and Edge Cases
 
 ### Security attack coverage
 
@@ -655,7 +688,7 @@ Expired or revoked tokens are detected on any API call and immediately cleared f
 
 ---
 
-## 14. API Reference Summary
+## 16. API Reference Summary
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -680,3 +713,71 @@ Expired or revoked tokens are detected on any API call and immediately cleared f
 | GET | `/workout-classes` | — | List classes |
 | GET | `/maintenance-tickets` | — | List tickets |
 | WS | `/ws` | — | Real-time push channel |
+
+---
+
+## 17. Deployment
+
+### Backend Deployment
+
+The backend was deployed on **Render** as a web service running the FastAPI application:
+
+- A database connection issue appeared due to cloud environment constraints with FalkorDB.
+- The issue was resolved by adjusting the connection settings to work within the hosted environment.
+- Initial data seeding ran successfully on first startup via the idempotent `lifespan` startup functions.
+
+### Frontend Deployment
+
+The frontend was deployed as a **static site** on Render:
+
+- Build command: `npm install && npm run build`
+- Publish directory: `dist`
+- The frontend connects dynamically to the deployed backend through the `VITE_API_URL` environment variable, set at build time on Render.
+
+### CORS Fix
+
+After deployment, the frontend initially failed to fetch data from the backend because the browser blocked cross-origin requests (frontend and backend hosted on different domains).
+
+**Fix applied:**
+
+- Updated `CORSMiddleware` in `backend/main.py` to allow the deployed frontend origin.
+- Pushed the fix to GitHub.
+- Redeployed using **Clear Build Cache & Deploy** on Render to pick up the change.
+
+**Result:** The frontend and backend now communicate correctly, and the live dashboard loads server data successfully.
+
+---
+
+## 18. Current Status
+
+The project is fully live:
+
+- Frontend deployed and accessible at https://gympulse-581j.onrender.com/#dashboard
+- Backend deployed and serving all API endpoints
+- Dashboard loading real data from the server
+- Charts pulling live analytics data
+- End-to-end flow — registration, login, reservations, admin operations — fully operational
+
+---
+
+## 19. Challenges Faced
+
+| Challenge | How It Was Resolved |
+|---|---|
+| Cloud database connectivity | Adjusted FalkorDB connection settings for the hosted environment |
+| Environment-variable linking | Used `VITE_API_URL` on Render to dynamically connect frontend to backend |
+| CORS restrictions in production | Updated `CORSMiddleware` to allow the deployed frontend origin |
+| Deployment reliability after startup routines | Made all 8 startup functions idempotent so restarts on Render are safe |
+
+These challenges were resolved successfully, proving the project works beyond a local development environment.
+
+---
+
+## 20. Limitations
+
+| Limitation | Notes |
+|---|---|
+| Production hardening | Additional hardening (HTTPS-only cookies, stricter CSP headers, secrets rotation) can still be improved |
+| Deployment complexity | The graph database and multi-step startup routines make cold starts slower than a simple SQL-backed service |
+| Scaling | The current architecture runs a single FalkorDB instance with no read replicas or sharding — horizontal scaling would require additional infrastructure |
+| Monitoring | No application performance monitoring (APM) or uptime alerting is currently in place |
