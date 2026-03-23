@@ -10,7 +10,7 @@ This document maps every grading requirement to the specific implementation in t
 
 **Status: Done**
 
-The entire backend is built with FastAPI (`backend/main.py`). It exposes 21 REST endpoints across 9 resource categories (Auth, Equipment, Reservations, Usage Logs, Analytics, Members, Gym Zones, Trainers, Maintenance). FastAPI's dependency injection system (`Depends`) is used for database access and authentication. Auto-generated Swagger docs are available at `http://localhost:8000/docs`.
+The entire backend is built with FastAPI (`backend/main.py`). It exposes 23 REST endpoints + 1 WebSocket endpoint across 10 resource categories (Auth, Equipment, Reservations, Usage Logs, Analytics, Members, Membership Plans, Gym Zones, Trainers, Maintenance). FastAPI's dependency injection system (`Depends`) is used for database access and authentication. Auto-generated Swagger docs are available at `http://localhost:8000/docs`.
 
 ---
 
@@ -59,7 +59,7 @@ GymPulse uses **FalkorDB** (a Redis-backed graph database) instead of a relation
 
 All queries are parameterized using FalkorDB's `$variable` syntax — no string interpolation. The database runs in a Docker container (`docker-compose.yml`) with a persistent volume so data survives restarts.
 
-**Where to find it:** `backend/services.py` (all Cypher queries), `backend/database.py` (connection), `docker-compose.yml` (container setup), `REPORT.md` Section 4.
+**Where to find it:** `backend/services.py` (all Cypher queries), `backend/database.py` (connection), `docker-compose.yml` (container setup), `REPORT.md` Section 6.
 
 ---
 
@@ -81,7 +81,6 @@ All queries are parameterized using FalkorDB's `$variable` syntax — no string 
 | 8 | **MaintenanceTicket** | issue_description, status, reported_date |
 | 9 | **Reservation** | start_time, end_time, status, member_name, notes |
 | 10 | **UsageLog** | start_time, end_time, duration_minutes, queue_wait_minutes |
-| 11 | **Admin** | username, hashed_password |
 
 #### Relationships (Graph Edges)
 
@@ -105,7 +104,7 @@ All queries are parameterized using FalkorDB's `$variable` syntax — no string 
 
 In a relational database this would require a junction table. In FalkorDB it is a direct edge between nodes — one of the core advantages of the graph model for this domain.
 
-**Where to find it:** `backend/schemas.py` (all entity schemas), `backend/services.py` (Cypher queries), `REPORT.md` Section 5.
+**Where to find it:** `backend/schemas.py` (all entity schemas), `backend/services.py` (Cypher queries), `REPORT.md` Section 7.
 
 ---
 

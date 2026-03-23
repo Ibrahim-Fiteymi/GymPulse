@@ -1,6 +1,9 @@
 # How to Run GymPulse (FalkorDB Graph Backend)
 
-To run the GymPulse application, you need to start the FalkorDB database (via Docker) and the FastAPI backend server.
+> **Live deployment:** https://gympulse-581j.onrender.com/#dashboard
+> **GitHub repository:** https://github.com/Ibrahim-Fiteymi/GymPulse
+
+To run the GymPulse application locally, you need to start the FalkorDB database (via Docker) and the FastAPI backend server.
 
 ---
 

@@ -239,11 +239,12 @@ backend/
 | Tag | Endpoints | Auth required |
 |---|---|---|
 | Auth | `POST /auth/admin/login`, `POST /auth/member/login` | None |
-| Equipment | `GET/POST/PUT/DELETE /equipment` | Admin (write) |
+| Equipment | `GET /equipment`, `GET /equipment/{id}`, `POST /equipment`, `PUT /equipment/{id}`, `DELETE /equipment/{id}` | Admin (write) |
 | Reservations | `GET /reservations`, `POST /reservations`, `PUT /reservations/{id}` | Member or Admin |
 | Usage Logs | `GET /usage-logs`, `POST /usage-logs` | Admin (write) |
 | Analytics | `GET /analytics/summary`, `/most-used`, `/peak-hours` | None |
 | Members | `GET /members`, `POST /members` | Public |
+| Membership Plans | `GET /membership-plans` | None |
 | Gym Zones | `GET/POST /gym-zones` | Admin (write) |
 | Maintenance | `GET /maintenance-tickets` | None |
 | WebSocket | `WS /ws` | JWT (query param `?token=`) |
@@ -381,7 +382,7 @@ if current_user["role"] == "member":
 
 ### Rate limiting
 
-Both login endpoints are protected with **slowapi** (per-IP, 10 requests/minute) to prevent brute-force password attacks:
+Three endpoints are protected with **slowapi** rate limiting to prevent abuse:
 
 ```python
 limiter = Limiter(key_func=get_remote_address)
@@ -389,9 +390,18 @@ app.state.limiter = limiter
 
 @app.post("/auth/admin/login", response_model=Token, tags=["Auth"])
 @limiter.limit("10/minute")
-def admin_login(request: Request, data: LoginRequest, graph: Graph = Depends(get_graph)):
-    ...
+def admin_login(...): ...
+
+@app.post("/auth/member/login", response_model=Token, tags=["Auth"])
+@limiter.limit("10/minute")
+def member_login(...): ...
+
+@app.post("/members", response_model=MemberRead, status_code=201, tags=["Members"])
+@limiter.limit("5/minute")
+def create_member(...): ...
 ```
+
+Both login endpoints are capped at **10 requests/minute** per IP to block brute-force attacks. The member registration endpoint is capped at **5 requests/minute** to prevent automated account creation.
 
 A custom 429 exception handler returns a JSON body (not plain text) so the response passes CORS and is readable by the frontend:
 
@@ -415,13 +425,26 @@ graph.query(
 
 ### CORS
 
-Origins restricted to the Vite dev server only — no wildcard allowed:
+The deployed backend uses a wildcard origin to allow the hosted frontend on Render to communicate with it:
 
 ```python
-allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"]
+allow_origins=["*"],
+allow_credentials=True,
+allow_methods=["*"],
+allow_headers=["*"],
 ```
 
-`allow_credentials=False` — auth is JWT in the Authorization header, never cookies, so no cookie CSRF risk.
+Auth is handled via JWT in the `Authorization` header, not cookies, so there is no cookie CSRF risk. Tightening the origin list to the specific deployed frontend URL is a known improvement listed in Limitations.
+
+### SECRET_KEY via environment variable
+
+The JWT signing key is read from an environment variable so it can be rotated in production without touching the code:
+
+```python
+SECRET_KEY = os.getenv("SECRET_KEY", "gympulse-dev-secret-change-in-production")
+```
+
+The default value is a placeholder that is only used during local development. On Render, `SECRET_KEY` is set as a secret environment variable.
 
 ### Token auto-invalidation on 401
 
@@ -639,6 +662,18 @@ All sandbox credentials are documented in `credentials.md` and removed from the 
 | Stale session reuse | 401 responses clear localStorage token, forcing re-login |
 | Internal error leakage | Global 500 handler logs full trace server-side; client receives only a UUID ref — no stack traces exposed |
 
+### Maintenance check before reservation creation
+
+Before any overlap checks run, the service verifies the equipment's stored status. If it is `'maintenance'`, the reservation is rejected outright:
+
+```python
+eq_status = eq_res.result_set[0][0]
+if eq_status == "maintenance":
+    raise ValueError("This equipment is currently under maintenance and cannot be reserved.")
+```
+
+Equipment in `'reserved'` or `'in_use'` status is still bookable — those statuses are derived from active reservations, not a hard block.
+
 ### Overlap detection (two layers)
 
 **Equipment-level:** same piece of equipment cannot have two confirmed reservations with overlapping windows.
@@ -650,6 +685,30 @@ edge_overlap  = # via BOOKED_BY graph edge
 prop_overlap  = # via member_id node property
 if edge_overlap > 0 or prop_overlap > 0:
     raise ValueError("You already have a reservation that overlaps this time slot.")
+```
+
+### Reservation cancellation guards
+
+`PUT /reservations/{id}` enforces two additional rules beyond ownership:
+
+1. **Cannot cancel a non-confirmed reservation** — cancelling an already-cancelled or completed reservation returns a 400 error.
+2. **Cannot cancel a past reservation** — if the reservation's start time has already passed, cancellation is blocked:
+
+```python
+if data.status == "cancelled" and existing.get("status") != "confirmed":
+    raise HTTPException(400, f"Cannot cancel a reservation with status '{existing.get('status')}'.")
+
+if start_naive <= datetime.utcnow():
+    raise HTTPException(400, "Cannot cancel a reservation that has already started or passed.")
+```
+
+### ReservationUpdate is restricted to status and notes
+
+The update service explicitly strips all fields except `status` and `notes` before writing to the graph. Start time, end time, and equipment cannot be changed after a reservation is created:
+
+```python
+allowed_keys = {"status", "notes"}
+props = {k: v for k, v in props.items() if k in allowed_keys}
 ```
 
 ### Reservation auto-completion
@@ -694,55 +753,79 @@ Expired or revoked tokens are detected on any API call and immediately cleared f
 |---|---|---|---|
 | POST | `/auth/admin/login` | — | Admin login → JWT |
 | POST | `/auth/member/login` | — | Member login → JWT |
-| GET | `/equipment` | — | List all equipment with live status |
+| GET | `/equipment` | — | List all equipment with live status; optional `?status=` filter |
+| GET | `/equipment/{id}` | — | Get a single equipment by ID |
 | POST | `/equipment` | Admin | Create equipment |
-| PUT | `/equipment/{id}` | Admin | Update equipment |
+| PUT | `/equipment/{id}` | Admin | Update equipment (status + notes only) |
 | DELETE | `/equipment/{id}` | Admin | Delete equipment (DETACH) |
-| GET | `/reservations` | — | List reservations (optional status filter) |
-| POST | `/reservations` | Member/Admin | Create reservation (overlap checked) |
-| PUT | `/reservations/{id}` | Member/Admin | Update/cancel reservation (ownership enforced) |
-| GET | `/usage-logs` | — | List usage logs |
+| GET | `/reservations` | — | List reservations; optional `?status=` filter |
+| POST | `/reservations` | Member/Admin | Create reservation (overlap + maintenance checked) |
+| PUT | `/reservations/{id}` | Member/Admin | Update/cancel reservation (ownership + past-time enforced) |
+| GET | `/usage-logs` | — | List usage logs; optional `?equipment_id=` filter |
 | POST | `/usage-logs` | Admin | Create usage log |
 | GET | `/analytics/summary` | — | KPI snapshot |
-| GET | `/analytics/most-used` | — | Top N equipment by sessions |
-| GET | `/analytics/peak-hours` | — | Reservations per hour for a given date |
+| GET | `/analytics/most-used` | — | Top N equipment by sessions; optional `?limit=` (default 10, max 50) |
+| GET | `/analytics/peak-hours` | — | Reservations per hour; optional `?date=YYYY-MM-DD` filter |
 | GET | `/members` | — | List members |
-| POST | `/members` | — | Register new member |
+| POST | `/members` | — | Register new member (rate-limited: 5/minute) |
+| GET | `/membership-plans` | — | List membership plans |
 | GET | `/gym-zones` | — | List zones |
+| POST | `/gym-zones` | Admin | Create a gym zone |
 | GET | `/trainers` | — | List trainers |
 | GET | `/workout-classes` | — | List classes |
 | GET | `/maintenance-tickets` | — | List tickets |
-| WS | `/ws` | — | Real-time push channel |
+| WS | `/ws` | JWT (`?token=`) | Real-time push channel |
 
 ---
 
 ## 17. Deployment
 
+- **Live application:** https://gympulse-581j.onrender.com/#dashboard
+- **GitHub repository:** https://github.com/Ibrahim-Fiteymi/GymPulse
+
+### Tools Used
+
+| Tool | Role |
+|---|---|
+| **VS Code** | Code editor — all project files written and modified here |
+| **Git** | Local version control — tracks every change to the codebase |
+| **GitHub** | Cloud repository — stores the source code and acts as the link between local development and Render |
+| **Render** | Cloud hosting — runs the backend as a Web Service and serves the frontend as a Static Site |
+| **FastAPI (Python)** | Backend engine |
+| **Vite / React (JavaScript)** | Frontend user interface |
+
+### Git Workflow
+
+Every code change followed the standard three-step Git workflow before being deployed:
+
+1. **Stage** — `git add .` gathers all modified files and marks them ready to save.
+2. **Commit** — `git commit -m "message"` takes a snapshot of the staged files with a descriptive label (e.g., `"Final fix for CORS issues"`).
+3. **Push** — `git push origin main` uploads the snapshot from the local machine to GitHub, which Render then picks up automatically.
+
 ### Backend Deployment
 
-The backend was deployed on **Render** as a web service running the FastAPI application:
+The backend was deployed on **Render** as a Web Service:
 
-- A database connection issue appeared due to cloud environment constraints with FalkorDB.
-- The issue was resolved by adjusting the connection settings to work within the hosted environment.
+- Render was linked to the GitHub repository and configured to pull from the `main` branch automatically.
+- On each deploy, Render installs the Python dependencies and starts the FastAPI server via `uvicorn`.
 - Initial data seeding ran successfully on first startup via the idempotent `lifespan` startup functions.
+- Whenever new Python code was pushed, **"Clear build cache & deploy"** was used on Render to force it to read the latest version of the code cleanly.
 
 ### Frontend Deployment
 
-The frontend was deployed as a **static site** on Render:
+The frontend was deployed as a **Static Site** on Render, pointed at the `frontend/` folder:
 
-- Build command: `npm install && npm run build`
-- Publish directory: `dist`
-- The frontend connects dynamically to the deployed backend through the `VITE_API_URL` environment variable, set at build time on Render.
+| Setting | Value |
+|---|---|
+| Build command | `npm install && npm run build` |
+| Publish directory | `dist` |
+| Environment variable | `VITE_API_URL = https://gympulse-backend-3wqo.onrender.com` |
+
+The `VITE_API_URL` environment variable is the "wire" connecting the frontend to the backend — it tells the React app exactly which server to fetch gym data from at build time.
 
 ### CORS Fix
 
-After deployment, the frontend initially failed to fetch data from the backend because the browser blocked cross-origin requests (frontend and backend hosted on different domains).
-
-**Fix applied:**
-
-- Updated `CORSMiddleware` in `backend/main.py` to allow the deployed frontend origin.
-- Pushed the fix to GitHub.
-- Redeployed using **Clear Build Cache & Deploy** on Render to pick up the change.
+After the initial deployment, the browser blocked all API requests because the frontend and backend were hosted on different domains (cross-origin). The fix was to add `CORSMiddleware` in `backend/main.py` with `allow_origins=["*"]`, which acts as an open pass letting the frontend communicate with the backend regardless of origin. The fix was pushed to GitHub and redeployed using **Clear build cache & deploy** on Render.
 
 **Result:** The frontend and backend now communicate correctly, and the live dashboard loads server data successfully.
 
@@ -777,7 +860,7 @@ These challenges were resolved successfully, proving the project works beyond a 
 
 | Limitation | Notes |
 |---|---|
-| Production hardening | Additional hardening (HTTPS-only cookies, stricter CSP headers, secrets rotation) can still be improved |
+| Production hardening | CORS is currently set to `allow_origins=["*"]` for deployment convenience; restricting to the exact frontend origin, adding stricter CSP headers, and rotating the SECRET_KEY regularly would further harden the system |
 | Deployment complexity | The graph database and multi-step startup routines make cold starts slower than a simple SQL-backed service |
 | Scaling | The current architecture runs a single FalkorDB instance with no read replicas or sharding — horizontal scaling would require additional infrastructure |
 | Monitoring | No application performance monitoring (APM) or uptime alerting is currently in place |
