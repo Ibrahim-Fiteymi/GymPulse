@@ -15,5 +15,3 @@ backend/gympulse.db
 # Node
 frontend/node_modules/
 frontend/dist/
-
-credentials.md
