@@ -19,8 +19,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-# Override SECRET_KEY via environment variable in production.
-SECRET_KEY = os.getenv("SECRET_KEY", "gympulse-dev-secret-change-in-production")
+# SECRET_KEY must be set as an environment variable. No default is provided.
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set. Set it before starting the server.")
 ALGORITHM  = "HS256"
 TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 hours
 
