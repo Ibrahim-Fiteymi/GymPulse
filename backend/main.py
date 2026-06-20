@@ -90,8 +90,8 @@ app.state.limiter = limiter
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -713,17 +713,51 @@ def create_member(request: Request, data: MemberCreate, graph: Graph = Depends(g
 def list_plans(graph: Graph = Depends(get_graph)):
     return MembershipPlanService.list_all(graph)
 
+@app.post("/membership-plans", response_model=MembershipPlanRead, status_code=201, tags=["Memberships"])
+def create_plan(
+    data: MembershipPlanCreate,
+    graph: Graph = Depends(get_graph),
+    _: dict = Depends(require_admin),
+):
+    return MembershipPlanService.create(graph, data)
+
 @app.get("/trainers", response_model=List[TrainerRead], tags=["Staff"])
 def list_trainers(graph: Graph = Depends(get_graph)):
     return TrainerService.list_all(graph)
+
+@app.post("/trainers", response_model=TrainerRead, status_code=201, tags=["Staff"])
+def create_trainer(
+    data: TrainerCreate,
+    graph: Graph = Depends(get_graph),
+    _: dict = Depends(require_admin),
+):
+    return TrainerService.create(graph, data)
 
 @app.get("/workout-classes", response_model=List[WorkoutClassRead], tags=["Staff"])
 def list_classes(graph: Graph = Depends(get_graph)):
     return WorkoutClassService.list_all(graph)
 
+@app.post("/workout-classes", response_model=WorkoutClassRead, status_code=201, tags=["Staff"])
+def create_class(
+    data: WorkoutClassCreate,
+    graph: Graph = Depends(get_graph),
+    _: dict = Depends(require_admin),
+):
+    return WorkoutClassService.create(graph, data)
+
 @app.get("/maintenance-tickets", response_model=List[MaintenanceTicketRead], tags=["Maintenance"])
 def list_tickets(graph: Graph = Depends(get_graph)):
     return MaintenanceTicketService.list_all(graph)
+
+@app.post("/maintenance-tickets", response_model=MaintenanceTicketRead, status_code=201, tags=["Maintenance"])
+def create_ticket(
+    data: MaintenanceTicketCreate,
+    graph: Graph = Depends(get_graph),
+    _: dict = Depends(require_admin),
+):
+    if not EquipmentService.get_by_id(graph, data.equipment_id):
+        raise HTTPException(status_code=404, detail="Equipment not found.")
+    return MaintenanceTicketService.create(graph, data)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
